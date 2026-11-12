@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    :root { color: #465b3f; }
+    @media (prefers-color-scheme: dark) { :root { color: #d8e4cc; } }
+  </style>
+  <g stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m16 7 10 5-10 5-10-5 10-5ZM6 12v12l10 5 10-5V12M16 17v12"/>
+    <path d="M12 9.5V12c0 2.7 8 2.7 8 0V9.5"/>
+    <ellipse cx="16" cy="9.5" rx="4" ry="2"/>
+  </g>
+</svg>

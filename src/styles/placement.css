@@ -1,0 +1,73 @@
+/* One source of truth for the selected brick's directional controls. */
+.placement-offset {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.offset-pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, 31px);
+  gap: 4px;
+  flex-shrink: 0;
+}
+.offset-pad > button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 1px solid #dce2d3;
+  background: #f6f7f1;
+  border-radius: 5px;
+  color: #556b4b;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+.offset-pad > button:hover { background: #e8eddf; }
+.offset-pad > button sub {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 9px/1 monospace;
+  color: #7c8972;
+}
+.offset-pad .offset-mode { grid-column: 1; grid-row: 1; font-size: 10px; }
+.offset-pad .offset-w { grid-column: 2; grid-row: 1; }
+.offset-pad .offset-up { grid-column: 3; grid-row: 1; }
+.offset-pad .offset-a { grid-column: 1; grid-row: 2; }
+.offset-pad .offset-reset { grid-column: 2; grid-row: 2; font-size: 11px; }
+.offset-pad .offset-d { grid-column: 3; grid-row: 2; }
+.offset-pad .offset-down { grid-column: 1; grid-row: 3; }
+.offset-pad .offset-s { grid-column: 2; grid-row: 3; }
+.offset-pad .offset-lock { grid-column: 3; grid-row: 3; }
+.offset-pad .selected { background: #e8eddf; border-color: #86976f; color: #445d3c; }
+.offset-pad .offset-reset:disabled { opacity: .4; cursor: default; }
+.offset-value {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 11px;
+  min-width: 0;
+  flex: 1;
+}
+.offset-value span:last-child { font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) {
+  .placement-offset { gap: 4px; flex-wrap: wrap; }
+  .offset-pad { grid-template-rows: repeat(3, 28px); gap: 2px; }
+  .offset-pad > button { font-size: 10px; }
+  .offset-pad .offset-reset, .offset-pad .offset-mode { font-size: 9px; }
+  .offset-pad > button sub { font-size: 8px; }
+  .offset-value { font-size: 9px; }
+}
