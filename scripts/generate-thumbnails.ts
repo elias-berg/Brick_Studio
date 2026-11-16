@@ -1,47 +1,31 @@
-import { createHash } from "node:crypto";
-import { readFile, mkdir, writeFile, access } from "node:fs/promises";
-import sharp from "sharp";
+import { readFile, writeFile } from "node:fs/promises";
 import { shapeFor } from "../src/engine/parts";
+import { isBuildingPart } from "../src/engine/catalog";
 import { thumbnailSvg } from "../src/engine/thumbnailSvg";
-import type { Catalog } from "../src/engine/types";
+import { thumbnailKey, thumbnailPalette, type ThumbnailBundle } from "../src/engine/thumbnailAssets";
+import type { Catalog, Shape } from "../src/engine/types";
 
-const catalog: Catalog = JSON.parse(
-  await readFile("public/data/catalog.json", "utf8"),
-);
-await mkdir("public/thumbnails", { recursive: true });
-await mkdir("src/data", { recursive: true });
-const images: Record<string, string> = {};
-let generated = 0;
-async function image(svg: string) {
-  const name =
-    createHash("sha256").update(svg).digest("hex").slice(0, 16) + ".png";
-  const path = `public/thumbnails/${name}`;
-  try {
-    await access(path);
-  } catch {
-    await sharp(Buffer.from(svg)).png().toFile(path);
-    generated++;
-  }
-  return `/thumbnails/${name}`;
+const catalog: Catalog = JSON.parse(await readFile("public/data/catalog.json", "utf8"));
+const templates: Record<string, string> = {};
+function add(shape: Shape | null, rotation = 0) {
+  const key = thumbnailKey(shape, rotation);
+  if (templates[key]) return;
+  let svg = thumbnailSvg(shape, undefined, rotation);
+  for (const [name, color] of Object.entries(thumbnailPalette())) svg = svg.replaceAll(color, `{{${name}}}`);
+  templates[key] = svg;
 }
-images.unknown = await image(thumbnailSvg(null));
-for (const part of catalog.parts) {
+add(null);
+for (const part of catalog.parts.filter(isBuildingPart)) {
   const shape = shapeFor(part);
   if (!shape) continue;
-  for (const rotation of [0, 90, 180, 270])
-    images[`${part.id}:${rotation}`] = await image(
-      thumbnailSvg(shape, undefined, rotation),
-    );
+  add(shape, 0);
+  add(shape, 90);
+  if (shape.sideStuds?.length) { add(shape, 180); add(shape, 270); }
 }
-const manifest = JSON.stringify(images, null, 2) + "\n",
-  path = "src/data/thumbnails.json";
+const bundle: ThumbnailBundle = { version: 1, templates: Object.fromEntries(Object.entries(templates).sort(([a], [b]) => a.localeCompare(b))) };
+const path = "public/data/thumbnails.json";
+const content = JSON.stringify(bundle) + "\n";
 let previous = "";
-try {
-  previous = await readFile(path, "utf8");
-} catch {
-  /* first generation */
-}
-if (previous !== manifest) await writeFile(path, manifest);
-console.log(
-  `Thumbnails: ${generated} new PNGs; ${Object.keys(images).length - 1} part/orientation mappings.`,
-);
+try { previous = await readFile(path, "utf8"); } catch { /* First generation. */ }
+if (previous !== content) await writeFile(path, content);
+console.log(`Thumbnails: ${Object.keys(templates).length} SVG templates in one asset bundle.`);

@@ -1,3 +1,5 @@
+import { RotationControls } from "./components/RotationControls";
+import { prepareThumbnails } from "./engine/thumbnailCache";
 import { useEditorShortcuts } from "./hooks/useEditorShortcuts";
 import { usePlacementControls } from "./hooks/usePlacementControls";
 import { MessageDialog } from "./components/MessageDialog";
@@ -14,7 +16,6 @@ import {
   ExternalLink,
   Plus,
   Trash2,
-  RotateCw,
   LocateFixed,
   Lightbulb,
   LightbulbOff,
@@ -39,7 +40,7 @@ import type {
 } from "./engine/types";
 import { EditorScene } from "./engine/EditorScene";
 import { groundedBrickIds } from "./engine/physics";
-import { shapeFor } from "./engine/parts";
+import { shapeFor, PLATE } from "./engine/parts";
 import { defaults, download, parseProject, projectDocument } from "./engine/storage";
 import type { RestoredProject } from "./engine/storage";
 import { demoBuild } from "./engine/demo";
@@ -54,6 +55,11 @@ import { PartIcon } from "./components/PartIcon";
 import { ProjectDialogs } from "./components/ProjectDialogs";
 import type { DialogName } from "./components/ProjectDialogs";
 const STORAGE = "brick-studio-project-v1";
+const AXIS_CONTROLS = [
+  ['a', 'moveLeft', 'x', -1], ['d', 'moveRight', 'x', 1],
+  ['w', 'moveForward', 'z', -1], ['s', 'moveBack', 'z', 1],
+  ['up', 'layerUp', 'y', 1], ['down', 'layerDown', 'y', -1],
+] as const;
 type Snapshot = { bricks: Brick[]; settings: Settings; name: string };
 function Editor({ catalog }: { catalog: CatalogData }) {
   const initial = useMemo(() => {
@@ -87,9 +93,10 @@ function Editor({ catalog }: { catalog: CatalogData }) {
     reason: "Move onto the build area",
     deleting: [],
   });
-  const { rotation, setRotation, placementOffset, setPlacementOffset, layer, setLayer,
-    placementLocked, setPlacementLocked, lastManualLayer, resetPlacement,
-    nudgePlacement, toggleLayerMode, nudgeLayer } = usePlacementControls(tool, setTool, hover);
+  const { rotation, setRotation, rotationX, setRotationX, rotationZ, setRotationZ, rotationMode, setRotationMode, adjustAxis, toggleRotationMode, placementOffset, setPlacementOffset, layer, setLayer,
+    placementAnchor, releasePlacement, placementLocked, setPlacementLocked, lastManualLayer, resetPlacement,
+    toggleLayerMode } = usePlacementControls(tool, setTool, hover);
+  const placementAdjusted = layer !== null || !!placementAnchor || !!placementOffset.x || !!placementOffset.z;
   const [modal, setModal] = useState<DialogName>(null),
     [notice, setNotice] = useState("");
   const [compactSidebars, setCompactSidebars] = useState(() => localStorage.getItem("brick-studio-compact-sidebars") === "true");
@@ -146,9 +153,10 @@ function Editor({ catalog }: { catalog: CatalogData }) {
         return;
       }
       commit([...latest.current.bricks, brick]);
-      if (!latest.current.placementLocked) { setRotation(0); setPlacementOffset({ x: 0, z: 0 }); }
+      releasePlacement();
+      if (!latest.current.placementLocked) { setRotation(0); setRotationX(0); setRotationZ(0); setPlacementOffset({ x: 0, z: 0 }); }
     },
-    [commit, notify],
+    [commit, notify, releasePlacement],
   );
   const remove = useCallback(
     (ids: string[]) => {
@@ -168,19 +176,23 @@ function Editor({ catalog }: { catalog: CatalogData }) {
     [commit, partLibrary],
   );
   const pick = useCallback((brick: Brick) => {
+    releasePlacement();
     setPlacementOffset({ x: 0, z: 0 });
     setPartId(brick.partId);
     setColorId(brick.colorId);
     setRotation((((Math.round(brick.rotation / 90) * 90) % 360) + 360) % 360);
+    setRotationX(brick.rotationX ?? 0);
+    setRotationZ(brick.rotationZ ?? 0);
+    setRotationMode(false);
     setTool("build");
-  }, []);
+  }, [releasePlacement]);
   useEffect(() => {
     if (!host.current) return;
     try {
       scene.current = new EditorScene(
         host.current,
         catalog,
-        { bricks, partId, colorId, rotation, placementOffset, tool, settings, layer, deleteMode },
+        { bricks, partId, colorId, rotation, rotationX, rotationZ, placementOffset, placementAnchor, tool, settings, layer, deleteMode },
         setHover,
         place,
         remove,
@@ -203,13 +215,16 @@ function Editor({ catalog }: { catalog: CatalogData }) {
       partId,
       colorId,
       rotation,
+      rotationX,
+      rotationZ,
       placementOffset,
+      placementAnchor,
       tool,
       settings,
       layer,
       deleteMode,
     });
-  }, [bricks, partId, colorId, rotation, placementOffset, tool, settings, layer, deleteMode]);
+  }, [bricks, partId, colorId, rotation, rotationX, rotationZ, placementOffset, placementAnchor, tool, settings, layer, deleteMode]);
   useEffect(() => {
     try { saveUserConfig(settings); }
     catch { notify("Configuration could not be saved in this browser."); }
@@ -227,43 +242,39 @@ function Editor({ catalog }: { catalog: CatalogData }) {
   const part = partLibrary.get(partId)!;
   const color = catalog.colors.find((c) => c.id === colorId)!;
   const shape = shapeFor(part)!;
-  const canRotate = shape.width !== shape.depth;
-  const rotate = useCallback(() => {
-    if (canRotate) setRotation((r) => (r + 90) % 360);
-  }, [canRotate]);
   const bindings = settings.keyBindings ?? defaultBindings;
   const shortcut = (action: ShortcutAction) => keyLabel(bindings[action]);
   useEditorShortcuts(bindings, scene, Boolean(modal || notice), (action, repeat) => {
     if (notice) { if (action === "cancel") setNotice(""); return; }
     if (deleteMenu && action === "cancel") { setDeleteMenu(false); return; }
     if (modal) { if (action === "cancel") setModal(modal === "disable-floating" ? floatingReturnModal : null); return; }
-    const nudges: Partial<Record<ShortcutAction, [number, number]>> = {
-      moveLeft: [-1, 0], moveRight: [1, 0], moveForward: [0, -1], moveBack: [0, 1],
-    };
-    const nudge = nudges[action];
-    if (nudge) { if (tool === "build") nudgePlacement(...nudge); return; }
-    if (action === "layerUp" || action === "layerDown") { if (tool === "build") nudgeLayer(action === "layerUp" ? 1 : -1); return; }
-    if (repeat && ["toggleLayer", "lock", "cancel"].includes(action)) return;
+    const adjustment = AXIS_CONTROLS.find(([, binding]) => binding === action);
+    if (adjustment) { if (tool === "build") adjustAxis(adjustment[2], adjustment[3]); return; }
+    if (repeat && ["toggleLayer", "rotate", "lock", "cancel"].includes(action)) return;
     switch (action) {
       case "toggleLayer": toggleLayerMode(); break;
       case "lock": setPlacementLocked((locked) => !locked); break;
       case "reset": resetPlacement(); break;
-      case "rotate": rotate(); break;
+      case "rotate": toggleRotationMode(); break;
       case "undo": undo(); break;
       case "redo": case "redoAlt": redo(); break;
-      case "build": case "cancel": setTool("build"); break;
-      case "deleteSingle": case "deleteRecursive": setDeleteMode(action === "deleteSingle" ? "single" : "recursive"); setTool("delete"); setDeleteMenu(false); break;
-      case "pick": setTool("pick"); break;
-      case "orbit": setTool("orbit"); break;
+      case "build": case "cancel": setRotationMode(false); setTool("build"); break;
+      case "deleteSingle": case "deleteRecursive": setRotationMode(false); setDeleteMode(action === "deleteSingle" ? "single" : "recursive"); setTool("delete"); setDeleteMenu(false); break;
+      case "pick": setRotationMode(false); setTool("pick"); break;
+      case "orbit": setRotationMode(false); setTool("orbit"); break;
       case "home": scene.current?.home(); break;
     }
   });
   const selectPart = useCallback((id: string) => {
+    releasePlacement();
     setPartId(id);
     setPlacementOffset({ x: 0, z: 0 });
     setRotation(0);
+    setRotationX(0);
+    setRotationZ(0);
+    setRotationMode(false);
     setTool("build");
-  }, []);
+  }, [releasePlacement]);
   const exportProject = () =>
     download(
       `${name || "untitled"}.brick.json`,
@@ -284,6 +295,7 @@ function Editor({ catalog }: { catalog: CatalogData }) {
       setName(project.name);
       setSettings(applyUserConfig(project.settings, userConfig(latest.current.settings)));
       setLayer(null);
+      releasePlacement();
       scene.current?.home();
     } catch (error) {
       notify(error instanceof Error ? error.message : "Could not open project");
@@ -360,40 +372,34 @@ function Editor({ catalog }: { catalog: CatalogData }) {
           </div>
           <div className="inspector-scroll">
             <section className="current-part">
-              <div className={`selected-preview ${canRotate ? "" : "no-rotation"}`}>
+              <div className="selected-preview no-rotation">
                 <PartIcon
                   part={part}
                   color={`#${color.rgb}`}
                   rotation={rotation}
+                  rotationX={rotationX}
+                  rotationZ={rotationZ}
                   large
                 />
-                {canRotate && <div className="preview-controls">
-                <button
-                  className="preview-rotate"
-                  aria-label="Rotate selected brick"
-                  aria-keyshortcuts={ariaShortcut(bindings.rotate)}
-                  title={`Rotate selected brick 90° (${shortcut("rotate")})`}
-                  onClick={rotate}
-                >
-                  <RotateCw size={18} />
-                  <kbd>{shortcut("rotate")}</kbd>
-                </button>
-                <span className="preview-angle">{rotation}°</span>
-                </div>}
+
               </div>
               <div className="placement-offset">
-                <div className="offset-pad" aria-label="Placement controls">
-                  {([['a', 'moveLeft', '-x', -1, 0], ['d', 'moveRight', '+x', 1, 0], ['w', 'moveForward', '-z', 0, -1], ['s', 'moveBack', '+z', 0, 1]] as const).map(([key, action, label, x, z]) => (
-                    <button key={key} className={`offset-${key}`} aria-keyshortcuts={ariaShortcut(bindings[action])} title={`Shift placement ${label} by one stud (${shortcut(action)})`} aria-label={`Offset ${label}`} onClick={() => nudgePlacement(x, z)}><span>{label}</span><sub>{shortcut(action)}</sub></button>
-                  ))}
-                  <button className="offset-up" title={`Raise bottom layer by one plate (${shortcut("layerUp")})`} aria-label="Raise placement layer" aria-keyshortcuts={ariaShortcut(bindings.layerUp)} onClick={() => nudgeLayer(1)}><span>+y</span><sub>{shortcut("layerUp")}</sub></button>
-                  <button className="offset-down" title={`Lower bottom layer by one plate (${shortcut("layerDown")})`} aria-label="Lower placement layer" aria-keyshortcuts={ariaShortcut(bindings.layerDown)} onClick={() => nudgeLayer(-1)}><span>−y</span><sub>{shortcut("layerDown")}</sub></button>
-                  <button className="offset-reset" title={`Reset rotation and all offsets; return to Auto (${shortcut("reset")})`} aria-label="Reset brick orientation and offset" aria-keyshortcuts={ariaShortcut(bindings.reset)} disabled={!rotation && !placementOffset.x && !placementOffset.z && layer === null && (lastManualLayer.current ?? 0) === 0} onClick={resetPlacement}><span>Reset</span><sub>{shortcut("reset")}</sub></button>
-                  <button className={`offset-mode ${layer !== null ? "selected" : ""}`} title={`Toggle Auto / Layer mode (${shortcut("toggleLayer")})`} aria-label="Toggle Auto and Layer mode" aria-keyshortcuts={ariaShortcut(bindings.toggleLayer)} aria-pressed={layer !== null} onClick={toggleLayerMode}><span>{layer === null ? "Auto" : "Layer"}</span><sub>{shortcut("toggleLayer")}</sub></button>
+                <div className={`offset-pad ${rotationMode ? "rotation-pad" : ""}`} aria-label={rotationMode ? "Rotation controls" : "Placement controls"}>
+                  {AXIS_CONTROLS.map(([key, action, axis, step]) => {
+                    const label = `${step > 0 ? "+" : "-"}${axis}`;
+                    const name = rotationMode ? `Rotate ${axis.toUpperCase()} ${step > 0 ? "+90" : "−90"} degrees` : axis === "y" ? `${step > 0 ? "Raise" : "Lower"} placement layer` : `Offset ${label}`;
+                    const increment = 1;
+                    const unit = axis === "y" ? "plate" : "stud";
+                    const title = rotationMode ? name : `Shift placement ${label} by ${increment} ${unit}${increment === 1 ? "" : "s"}`;
+                    return <button key={key} className={`offset-${key}`} aria-keyshortcuts={ariaShortcut(bindings[action])} title={`${title} (${shortcut(action)})`} aria-label={name} onClick={() => adjustAxis(axis, step)}><span>{label}{rotationMode ? " 90°" : ""}</span><sub>{shortcut(action)}</sub></button>;
+                  })}
+                  <button className="offset-reset" title={`Reset rotation and all offsets; return to Auto (${shortcut("reset")})`} aria-label="Reset brick orientation and offset" aria-keyshortcuts={ariaShortcut(bindings.reset)} disabled={!rotationMode && !placementAnchor && !rotation && !rotationX && !rotationZ && !placementOffset.x && !placementOffset.z && layer === null && (lastManualLayer.current ?? 0) === 0} onClick={resetPlacement}><span>Reset</span><sub>{shortcut("reset")}</sub></button>
+                  <button className={`offset-mode ${!rotationMode && placementAdjusted ? "selected" : ""}`} title={`${rotationMode ? "Return to placement offsets" : placementAdjusted ? "Release target and offsets; follow the pointer in Auto" : "Hold current target in Layer mode"} (${shortcut("toggleLayer")})`} aria-label="Toggle Auto and Layer mode" aria-keyshortcuts={ariaShortcut(bindings.toggleLayer)} aria-pressed={!rotationMode && placementAdjusted} onClick={toggleLayerMode}><span>{layer !== null ? "Layer" : placementAnchor ? "Fixed" : placementOffset.x || placementOffset.z ? "Offset" : "Auto"}</span><sub>{shortcut("toggleLayer")}</sub></button>
                   <button className={`offset-lock ${placementLocked ? "selected" : ""}`} title={`${placementLocked ? "Keep rotation and offsets after placing" : "Reset rotation and offsets after placing"} (${shortcut("lock")})`} aria-label="Lock placement orientation" aria-keyshortcuts={ariaShortcut(bindings.lock)} aria-pressed={placementLocked} onClick={() => setPlacementLocked((locked) => !locked)}>{placementLocked ? <LockKeyhole size={15} /> : <LockKeyholeOpen size={15} />}<sub>{shortcut("lock")}</sub></button>
                 </div>
-                <div className="offset-value"><span>x {placementOffset.x} · z {placementOffset.z} studs</span><span>y {layer === null ? "auto" : `${layer} plates`}</span></div>
+                <div className="offset-value"><span>x {placementOffset.x} · z {placementOffset.z} studs</span><span>y {layer !== null ? `${layer} plates` : placementAnchor ? `${Number((placementAnchor.y / PLATE).toFixed(2))} plates` : "auto"}{placementAnchor ? " · fixed" : ""}</span></div>
               </div>
+              <RotationControls active={rotationMode} x={rotationX} y={rotation} z={rotationZ} binding={bindings.rotate} onToggle={toggleRotationMode} />
               <label className="floating-setting"><input type="checkbox" checked={settings.allowFloating === true} onChange={(e) => setting("allowFloating", e.target.checked)} /><span>Allow floating bricks</span></label>
               <h3>{part.name}</h3>
               <div className="part-specs">
@@ -445,16 +451,16 @@ function Editor({ catalog }: { catalog: CatalogData }) {
               aria-label="Build tool"
               title={`Build (${shortcut("build")})`}
               className={tool === "build" ? "active" : ""}
-              onClick={() => setTool("build")}
+              onClick={() => { setRotationMode(false); setTool("build"); }}
             >
               <BrickIcon size={23} />
             </TooltipButton>
             <div className="delete-tool-group">
-              <TooltipButton aria-label="Delete tool" title={deleteMode === "single" ? `Delete one brick (${shortcut("deleteSingle")})` : `Recursive delete (${shortcut("deleteRecursive")})`} className={tool === "delete" ? "active danger" : ""} aria-haspopup="menu" aria-expanded={deleteMenu} onClick={() => { setTool("delete"); setDeleteMenu(!deleteMenu); }}>
+              <TooltipButton aria-label="Delete tool" title={deleteMode === "single" ? `Delete one brick (${shortcut("deleteSingle")})` : `Recursive delete (${shortcut("deleteRecursive")})`} className={tool === "delete" ? "active danger" : ""} aria-haspopup="menu" aria-expanded={deleteMenu} onClick={() => { setRotationMode(false); setTool("delete"); setDeleteMenu(!deleteMenu); }}>
                 <Trash2 size={18} /><sub className="delete-badge">{deleteMode === "single" ? "1" : "∞"}</sub>
               </TooltipButton>
               {deleteMenu && <><button className="delete-menu-dismiss" aria-label="Close delete menu" onClick={() => setDeleteMenu(false)} /><div className="delete-mode-menu glass" role="menu" aria-label="Delete mode">
-                {([['single', '1', 'Single brick'], ['recursive', '∞', 'Recursive delete']] as const).map(([mode, badge, label]) => <button role="menuitemradio" aria-checked={deleteMode === mode} key={mode} onClick={() => { setDeleteMode(mode); setTool("delete"); setDeleteMenu(false); }}><sub>{badge}</sub><span>{label}</span></button>)}
+                {([['single', '1', 'Single brick'], ['recursive', '∞', 'Recursive delete']] as const).map(([mode, badge, label]) => <button role="menuitemradio" aria-checked={deleteMode === mode} key={mode} onClick={() => { setRotationMode(false); setDeleteMode(mode); setTool("delete"); setDeleteMenu(false); }}><sub>{badge}</sub><span>{label}</span></button>)}
               </div></>}
             </div>
             <TooltipButton
@@ -462,7 +468,7 @@ function Editor({ catalog }: { catalog: CatalogData }) {
               aria-keyshortcuts={ariaShortcut(bindings.pick)}
               title={`Pick brick and color (${shortcut("pick")})`}
               className={tool === "pick" ? "active" : ""}
-              onClick={() => setTool("pick")}
+              onClick={() => { setRotationMode(false); setTool("pick"); }}
             >
               <HelpCircle size={19} />
             </TooltipButton>
@@ -472,7 +478,7 @@ function Editor({ catalog }: { catalog: CatalogData }) {
               aria-keyshortcuts={ariaShortcut(bindings.orbit)}
               title={`Orbit view (${shortcut("orbit")})`}
               className={tool === "orbit" ? "active" : ""}
-              onClick={() => setTool("orbit")}
+              onClick={() => { setRotationMode(false); setTool("orbit"); }}
             >
               <ViewOrbitIcon size={25} />
             </TooltipButton>
@@ -518,9 +524,9 @@ function Editor({ catalog }: { catalog: CatalogData }) {
                 <li>Select a brick in the brick library.</li>
                 <li>Choose a color in Selected brick.</li>
                 <li>Move onto the grid and click to place the brick.</li>
-                {canRotate && <li>
-                  Press <kbd>{shortcut("rotate")}</kbd> to rotate the brick.
-                </li>}
+                <li>
+                  Press <kbd>{shortcut("rotate")}</kbd> for Rotate mode.
+                </li>
                 <li>
                   Use the Orbit tool or middle-drag to rotate the view; scroll
                   to zoom.
@@ -563,10 +569,11 @@ function Editor({ catalog }: { catalog: CatalogData }) {
                         : "Build mode"}
               </strong>
               <span>{hover.reason}</span>
+              {!!hover.conflicts?.length && <span>Red rings: blocked studs · Blue crosses: nearest sockets</span>}
             </div>
             {hover.brick && tool === "build" && (
               <small>
-                {hover.brick.x.toFixed(1)}, {Math.round(hover.brick.y / 0.4)},{" "}
+                {hover.brick.x.toFixed(1)}, {Number((hover.brick.y / PLATE).toFixed(2))},{" "}
                 {hover.brick.z.toFixed(1)}
               </small>
             )}
@@ -598,7 +605,7 @@ function Editor({ catalog }: { catalog: CatalogData }) {
           <AxisWidget ref={axisWidget} />
         </section>
       </main>
-      <ShortcutFooter bindings={bindings} />
+      <ShortcutFooter bindings={bindings} rotationMode={rotationMode} />
       <input
         className="hidden"
         type="file"
@@ -650,6 +657,7 @@ function Editor({ catalog }: { catalog: CatalogData }) {
           commit(sample ? demoBuild() : []);
           setName(sample ? "Pavilion study" : "Untitled");
           setLayer(null);
+          releasePlacement();
           setTool("build");
           scene.current?.home();
           setModal(null);
@@ -667,7 +675,10 @@ export default function App() {
         if (!r.ok) throw Error("Catalog unavailable");
         return r.json();
       })
-      .then(setCatalog)
+      .then(async (data: CatalogData) => {
+        await prepareThumbnails(data);
+        setCatalog(data);
+      })
       .catch((e) => setError(e.message));
   }, []);
   if (error)

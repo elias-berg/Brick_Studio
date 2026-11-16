@@ -1,0 +1,121 @@
+{
+  "format": "brick-studio",
+  "version": 1,
+  "name": "Side connection regressions",
+  "bricks": [
+    {
+      "id": "left-column0",
+      "partId": "3005",
+      "colorId": 14,
+      "x": -4,
+      "y": 0.0,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "right-column0",
+      "partId": "3004",
+      "colorId": 14,
+      "x": 0,
+      "y": 0.0,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "left-column1",
+      "partId": "3005",
+      "colorId": 14,
+      "x": -4,
+      "y": 1.2,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "right-column1",
+      "partId": "3004",
+      "colorId": 14,
+      "x": 0,
+      "y": 1.2,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "left-side",
+      "partId": "87087",
+      "colorId": 14,
+      "x": -4,
+      "y": 2.4,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "left-tube",
+      "partId": "3003",
+      "colorId": 14,
+      "x": -4,
+      "y": 2.1,
+      "z": 1.1,
+      "rotation": 0,
+      "rotationX": 90,
+      "rotationZ": 0
+    },
+    {
+      "id": "right-side",
+      "partId": "11211",
+      "colorId": 14,
+      "x": 0,
+      "y": 2.4,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "right-tubes",
+      "partId": "3001",
+      "colorId": 14,
+      "x": 1.1,
+      "y": 2.1,
+      "z": 0.5,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 270
+    },
+    {
+      "id": "partial-source",
+      "partId": "87087",
+      "colorId": 14,
+      "x": 4,
+      "y": 0,
+      "z": 0,
+      "rotation": 0,
+      "rotationX": 0,
+      "rotationZ": 0
+    },
+    {
+      "id": "partial-receiver",
+      "partId": "3024",
+      "colorId": 14,
+      "x": 4,
+      "y": 0.2,
+      "z": 0.8,
+      "rotation": 0,
+      "rotationX": 90,
+      "rotationZ": 0
+    }
+  ],
+  "settings": {
+    "boardSize": 48,
+    "allowFloating": false
+  }
+}

@@ -5,7 +5,7 @@ const groups: { actions: ShortcutAction[]; label: string }[] = [
   { actions: ["toggleLayer"], label: "Auto / Layer" },
   { actions: ["lock"], label: "Lock" },
   { actions: ["reset"], label: "Reset / Auto" },
-  { actions: ["rotate"], label: "Rotate brick" },
+  { actions: ["rotate"], label: "Rotate mode" },
   { actions: ["build"], label: "Build" },
   { actions: ["deleteSingle"], label: "Delete 1" },
   { actions: ["deleteRecursive"], label: "Delete ∞" },
@@ -18,12 +18,12 @@ const groups: { actions: ShortcutAction[]; label: string }[] = [
   { actions: ["redoAlt"], label: "Redo" },
   { actions: ["cancel"], label: "Close / Build" },
 ];
-export function ShortcutFooter({ bindings }: { bindings: KeyBindings }) {
+export function ShortcutFooter({ bindings, rotationMode }: { bindings: KeyBindings; rotationMode: boolean }) {
   return <footer className="app-footer shortcut-footer" aria-label="Mouse controls and all keyboard shortcuts">
     <span><b>Middle drag</b> Orbit</span>
     <span><b>Right drag</b> Pan</span>
     <span><b>Scroll</b> Zoom</span>
     <span><b>Sideways / shift+scroll</b> Orbit</span>
-    {groups.map(({ actions, label }) => <span key={actions.join("/")}><kbd>{actions.map((action) => keyLabel(bindings[action])).join(" / ")}</kbd>{label}</span>)}
+    {groups.map(({ actions, label }) => <span key={actions.join("/")}><kbd>{actions.map((action) => keyLabel(bindings[action])).join(" / ")}</kbd>{rotationMode && actions[0] === "moveForward" ? "Rotate x/z · 90°" : rotationMode && actions[0] === "layerDown" ? "Rotate y · 90°" : label}</span>)}
   </footer>;
 }

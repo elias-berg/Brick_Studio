@@ -3,6 +3,7 @@ import { keyLabel, defaultBindings } from "../engine/shortcuts";
 import { Plus, Save, X } from "lucide-react";
 import type { Brick, Catalog, Settings } from "../engine/types";
 import { shapeFor } from "../engine/parts";
+import { withinBoard } from "../engine/physics";
 import { InventoryPanel } from "./InventoryPanel";
 
 export type DialogName = "disable-floating" | "delete-single" | "settings" | "help" | "inventory" | "new" | null;
@@ -122,20 +123,7 @@ export function ProjectDialogs({
                     onChange={(e) => {
                       const size = +e.target.value;
                       const lib = new Map(catalog.parts.map((p) => [p.id, p]));
-                      const exceeds = bricks.some((b) => {
-                        const s = shapeFor(lib.get(b.partId))!;
-                        const r = (b.rotation * Math.PI) / 180;
-                        const hx =
-                            (Math.abs(Math.cos(r)) * s.width) / 2 +
-                            (Math.abs(Math.sin(r)) * s.depth) / 2,
-                          hz =
-                            (Math.abs(Math.sin(r)) * s.width) / 2 +
-                            (Math.abs(Math.cos(r)) * s.depth) / 2;
-                        return (
-                          Math.abs(b.x) + hx > size / 2 ||
-                          Math.abs(b.z) + hz > size / 2
-                        );
-                      });
+                      const exceeds = bricks.some((brick) => !withinBoard(brick, lib, size));
                       if (exceeds) {
                         notify(
                           "Choose a larger area: some bricks would be outside this size.",
@@ -172,8 +160,8 @@ export function ProjectDialogs({
                   </p>
                   <p>
                     <b>2. Click to place.</b> Hover over an existing brick to
-                    stack. Use the mouse rotation buttons or {keyLabel((settings.keyBindings ?? defaultBindings).rotate)} to turn a part.
-                    Rectangular parts rotate clockwise in 90° steps; symmetric square and round parts do not need rotation.
+                    stack. Use Rotate mode ({keyLabel((settings.keyBindings ?? defaultBindings).rotate)}) to change the part’s X/Y/Z orientation.
+                    Open Rotate mode to adjust X, Y and Z in 90° steps. Rotation values appear below the placement offsets.
                   </p>
                   <p>
                     <b>3. Explore your build.</b> Hold the middle mouse button

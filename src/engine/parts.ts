@@ -5,6 +5,12 @@ export const STUD_RADIUS = 0.29;
 // Deliberately explicit: a part is placeable only when its solid and connectors are known.
 export function shapeFor(part?: Part): Shape | null {
   if (!part) return null;
+  // Connector centers follow the LDraw dimensions: 20 LDU/stud, side
+  // center 10 LDU below the top of a 24 LDU brick (0.7 above its base).
+  if (part.id === "87087") return { width: 1, depth: 1, height: 3, kind: "brick", studs: true,
+    sideStuds: [{ point: { x: 0, y: .7, z: .5 }, normal: { x: 0, y: 0, z: 1 } }] };
+  if (part.id === "11211") return { width: 1, depth: 2, height: 3, kind: "brick", studs: true,
+    sideStuds: [-.5, .5].map((z) => ({ point: { x: .5, y: .7, z }, normal: { x: 1, y: 0, z: 0 } })) };
   const match =
     /^(Brick|Plate|Tile|Baseplate) (\d+) x (\d+)(?: with (?:Bottom Tube|Groove|Bottom Pin))?$/.exec(
       part.name,
@@ -31,6 +37,8 @@ export function shapeFor(part?: Part): Shape | null {
 }
 export const preferredParts = [
   "3001",
+  "87087",
+  "11211",
   "3003",
   "3004",
   "3005",

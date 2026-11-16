@@ -24,7 +24,7 @@ export function readUserConfig(): UserConfig | null {
   }
 }
 export function saveUserConfig(settings: Settings) {
-  localStorage.setItem(CONFIG_STORAGE, JSON.stringify({ version: 2, ...userConfig(settings) }));
+  localStorage.setItem(CONFIG_STORAGE, JSON.stringify({ version: 3, ...userConfig(settings) }));
 }
 export const defaultUserConfig = userConfig(defaults);
 

@@ -1,16 +1,17 @@
+import { snapTranslation } from "./grid";
+import { worldConnectors, dot } from "./spatial";
 import { cameraAxes, type AxisDirection } from "./orientation";
 import { keyLabel } from "./shortcuts";
 import * as THREE from "three";
-import { buildSurfaceHit, centeredStudSnap } from "./targeting";
+import { buildSurfaceHit, snapToConnection } from "./targeting";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { Brick, Catalog, Color, Hover, Settings, Tool } from "./types";
+import type { Brick, Catalog, Color, Hover, PlacementAnchor, Settings, Tool } from "./types";
 import { shapeFor, PLATE } from "./parts";
-import { brickMesh, disposeGroup, setBrickContrast, updateBrickSilhouettes } from "./geometry";
+import { brickMesh, studConflictMarkers, disposeGroup, setBrickContrast, updateBrickSilhouettes } from "./geometry";
 import {
-  connectors,
   footprintsOverlap,
+  placementStudConflicts,
   deletionCascade,
-  rotatePoint,
   shapeOf,
   top,
   validate,
@@ -22,7 +23,10 @@ export interface SceneState {
   partId: string;
   colorId: number;
   rotation: number;
+  rotationX: number;
+  rotationZ: number;
   placementOffset: { x: number; z: number };
+  placementAnchor: PlacementAnchor | null;
   tool: Tool;
   settings: Settings;
   layer: number | null;
@@ -243,10 +247,10 @@ export class EditorScene {
     ray.setFromCamera(sample.pointer, this.camera);
     const point = ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.manualProjection.y), new THREE.Vector3());
     if (!point) return;
-    const phase = rotatePoint((shape.width - 1) / 2, (shape.depth - 1) / 2, state.rotation);
-    // Preserve the stud-centered Auto snap at the handoff to the manual plane.
-    this.manualProjection.x = sample.baseX - (Math.round(point.x + phase.x) - phase.x);
-    this.manualProjection.z = sample.baseZ - (Math.round(point.z + phase.z) - phase.z);
+    const seed: Brick = { id: "phase", partId: state.partId, colorId: state.colorId, x: 0, y: 0, z: 0, rotation: state.rotation, rotationX: state.rotationX, rotationZ: state.rotationZ };
+    const phase = worldConnectors(seed, shape).find((p) => p.kind === "socket")?.point ?? { x: 0, y: 0, z: 0 };
+    this.manualProjection.x = sample.baseX - snapTranslation(point.x, phase.x);
+    this.manualProjection.z = sample.baseZ - snapTranslation(point.z, phase.z);
   }
   private move = (e: PointerEvent) => {
     this.hoverDirty = true;
@@ -315,7 +319,7 @@ export class EditorScene {
           : "Move onto the build area",
       deleting: [],
     };
-    if (this.cursor.inside && !this.buttons && this.state.tool !== "orbit") {
+    if ((this.cursor.inside || (this.state.tool === "build" && this.state.placementAnchor)) && !this.buttons && this.state.tool !== "orbit") {
       this.models.updateMatrixWorld(true);
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const hits = this.raycaster
@@ -358,6 +362,17 @@ export class EditorScene {
             deleting: this.state.deleteMode === "single" ? [hitBrick.id] : this.deleteCache.ids,
           };
         } else h.reason = "Hover over a brick to preview removal";
+      } else if (this.state.placementAnchor) {
+        const anchor = this.state.placementAnchor;
+        const b: Brick = {
+          id: "preview", partId: this.state.partId, colorId: this.state.colorId,
+          rotation: this.state.rotation, rotationX: this.state.rotationX, rotationZ: this.state.rotationZ,
+          x: anchor.x + this.state.placementOffset.x,
+          y: this.state.layer === null ? anchor.y : this.state.layer * PLATE,
+          z: anchor.z + this.state.placementOffset.z,
+        };
+        const reason = validate(b, this.state.bricks, this.parts, this.state.settings.boardSize, !this.state.settings.allowFloating);
+        h = { brick: b, valid: !reason, deleting: [], reason: reason ? `Target held · ${reason}` : "Target held · click in viewport to place" };
       } else {
         const s = shapeFor(this.parts.get(this.state.partId));
         if (s) {
@@ -380,57 +395,31 @@ export class EditorScene {
                 point,
               );
           if (intersection) {
-            const offset = rotatePoint(
-              (s.width - 1) / 2,
-              (s.depth - 1) / 2,
-              this.state.rotation,
-            );
-            let x = Math.round(point.x + offset.x) - offset.x + (followSurface ? 0 : this.manualProjection.x),
-              z = Math.round(point.z + offset.z) - offset.z + (followSurface ? 0 : this.manualProjection.z);
-            if (
-              hitBrick &&
-              followSurface &&
-              shapeOf(hitBrick, this.parts).studs
-            ) {
-              const studs = connectors(hitBrick, shapeOf(hitBrick, this.parts));
-              const anchor = studs.reduce((best, p) =>
-                Math.hypot(p.x - point.x, p.z - point.z) <
-                Math.hypot(best.x - point.x, best.z - point.z)
-                  ? p
-                  : best,
-              );
-              const candidate = {
-                id: "preview",
-                partId: this.state.partId,
-                colorId: this.state.colorId,
-                x,
-                y,
-                z,
-                rotation: this.state.rotation,
-              };
-              const sockets = connectors(candidate, s);
-              const socket = sockets.reduce((best, p) =>
-                Math.hypot(p.x - anchor.x, p.z - anchor.z) <
-                Math.hypot(best.x - anchor.x, best.z - anchor.z)
-                  ? p
-                  : best,
-              );
-              x += anchor.x - socket.x;
-              z += anchor.z - socket.z;
-              const centered = centeredStudSnap(point, hitBrick, s, this.state.rotation, this.parts);
-              if (centered) { x = centered.x; z = centered.z; }
-            }
-            x += this.state.placementOffset.x;
-            z += this.state.placementOffset.z;
-            let b: Brick = {
-              id: "preview",
-              partId: this.state.partId,
-              colorId: this.state.colorId,
-              x,
-              y,
-              z,
-              rotation: this.state.rotation,
+            const orientation = { rotation: this.state.rotation, rotationX: this.state.rotationX, rotationZ: this.state.rotationZ };
+            const seed: Brick = { id: "preview", partId: this.state.partId, colorId: this.state.colorId, x: 0, y: 0, z: 0, ...orientation };
+            const phase = worldConnectors(seed, s).find((p) => p.kind === "socket")?.point ?? { x: 0, y: 0, z: 0 };
+            let b: Brick = { ...seed,
+              x: snapTranslation(point.x, phase.x) + (followSurface ? 0 : this.manualProjection.x),
+              y, z: snapTranslation(point.z, phase.z) + (followSurface ? 0 : this.manualProjection.z),
             };
+            let connectionReason = "";
+            if (followSurface && hitBrick && hit) {
+              const localNormal = hit.object.userData.studNormal as number[] | undefined;
+              const normal = localNormal ? new THREE.Vector3(...localNormal as [number, number, number]).transformDirection(hit.object.matrixWorld) : hit.face?.normal.clone().transformDirection(hit.object.matrixWorld) ?? new THREE.Vector3(0, 1, 0);
+              const offset = this.state.placementOffset;
+              const previous = this.hover.valid && this.hover.brick?.partId === seed.partId ? this.hover.brick : null;
+              const snapped = snapToConnection(point, normal, hitBrick, s, orientation, shapeOf(hitBrick, this.parts), {
+                preferred: previous ? { ...previous, x: previous.x - offset.x, z: previous.z - offset.z } : null,
+                viewDirection: this.camera.position.clone().sub(point).normalize(),
+                accept: (candidate) => !validate({ ...candidate, partId: seed.partId, colorId: seed.colorId,
+                  x: candidate.x + offset.x, z: candidate.z + offset.z },
+                  this.state.bricks, this.parts, this.state.settings.boardSize, !this.state.settings.allowFloating),
+              });
+              if (snapped) b = { ...snapped, partId: seed.partId, colorId: seed.colorId };
+              else if (!this.state.settings.allowFloating && worldConnectors(hitBrick, shapeOf(hitBrick, this.parts)).some((p) => dot(p.normal, normal) > .8)) connectionReason = "No matching stud/socket faces this surface in the current orientation";
+            }
+            b.x += this.state.placementOffset.x;
+            b.z += this.state.placementOffset.z;
             // A directly targeted surface wins, including underneath overhangs.
             // Only search the footprint for support when the pointer misses every brick.
             if (followSurface && !hitBrick) {
@@ -457,7 +446,7 @@ export class EditorScene {
                 }
               }
             }
-            const reason = validate(
+            const reason = connectionReason || validate(
               b,
               this.state.bricks,
               this.parts,
@@ -474,6 +463,9 @@ export class EditorScene {
           }
         } else h.reason = "This catalog part has no geometry definition yet";
       }
+    }
+    if (this.state.tool === "build" && h.brick && !h.valid && h.reason.toLowerCase().includes("stud")) {
+      h.conflicts = placementStudConflicts(h.brick, this.state.bricks, this.parts);
     }
     const signature = JSON.stringify(h);
     if (signature === this.signature) return;
@@ -495,6 +487,7 @@ export class EditorScene {
         ),
       );
     }
+    if (h.conflicts?.length) this.overlays.add(studConflictMarkers(h.conflicts));
     if (this.state.tool === "pick" && h.brick)
       this.overlays.add(
         brickMesh(h.brick, shapeOf(h.brick, this.parts), color, "#3677a8"),

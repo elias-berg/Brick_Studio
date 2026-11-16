@@ -33,6 +33,8 @@ export function parseSettings(value: unknown): Settings {
   if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) throw Error("Invalid viewport settings.");
   const supplied = value as Partial<Settings> | undefined;
   const settings = { ...defaults, ...supplied, keyBindings: parseBindings(supplied?.keyBindings) };
+  // Discard the removed step-size preference in legacy browser/project data.
+  Reflect.deleteProperty(settings, "offsetSteps");
   if (
     ![32, 48, 64, 96].includes(settings.boardSize) ||
     typeof settings.allowFloating !== "boolean" ||
@@ -72,7 +74,8 @@ export function parseProject(value: unknown, catalog: Catalog): RestoredProject 
       ids.has(b.id) ||
       !shapeFor(lib.get(b.partId)) ||
       !colors.has(b.colorId) ||
-      ![b.x, b.y, b.z, b.rotation].every(Number.isFinite)
+      ![b.x, b.y, b.z, b.rotation, b.rotationX ?? 0, b.rotationZ ?? 0].every(Number.isFinite) ||
+      [b.rotationX ?? 0, b.rotationZ ?? 0].some((angle) => angle % 90 !== 0)
     )
       throw Error("Invalid or unsupported brick in project.");
     ids.add(b.id);

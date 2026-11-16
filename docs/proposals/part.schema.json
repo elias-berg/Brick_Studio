@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Brick Studio proposed part definition v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "units": {
+      "const": "ldu"
+    },
+    "origin": {
+      "const": "body-bottom-center"
+    },
+    "up": {
+      "const": "+y"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "author": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "author",
+        "license"
+      ]
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "const": "ldraw-packed"
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "basis": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/vector"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "translation": {
+              "$ref": "#/$defs/vector"
+            }
+          },
+          "required": [
+            "basis",
+            "translation"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "asset",
+        "transform"
+      ]
+    },
+    "collision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "template": {
+              "const": "rectangular-shell"
+            },
+            "size": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "wall": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "roof": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "supports": {
+              "enum": [
+                "tubes",
+                "pins",
+                "none"
+              ]
+            },
+            "supportOuterRadius": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "supportInnerRadius": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "template",
+            "size",
+            "wall",
+            "roof",
+            "supports",
+            "supportOuterRadius",
+            "supportInnerRadius"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "convex-compound"
+            },
+            "asset": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "format",
+            "asset"
+          ]
+        }
+      ]
+    },
+    "connectors": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stud",
+                  "socket"
+                ]
+              },
+              "normal": {
+                "$ref": "#/$defs/vector"
+              },
+              "radius": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "depth": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "point": {
+                "$ref": "#/$defs/vector"
+              }
+            },
+            "required": [
+              "kind",
+              "normal",
+              "radius",
+              "depth",
+              "point"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "stud",
+                  "socket"
+                ]
+              },
+              "normal": {
+                "$ref": "#/$defs/vector"
+              },
+              "radius": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "depth": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "grid": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "origin": {
+                    "$ref": "#/$defs/vector"
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/vector"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "count": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "origin",
+                  "steps",
+                  "count"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "normal",
+              "radius",
+              "depth",
+              "grid"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "version",
+    "id",
+    "units",
+    "origin",
+    "up",
+    "source",
+    "geometry",
+    "collision",
+    "connectors"
+  ],
+  "$defs": {
+    "vector": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}

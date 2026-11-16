@@ -1,54 +1,22 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useId, useMemo } from "react";
 import type { Part } from "../engine/types";
 import { shapeFor } from "../engine/parts";
-import { THUMBNAIL_COLOR, quarterTurn } from "../engine/thumbnailSvg";
-import { coloredThumbnail } from "../engine/thumbnailCache";
-import thumbnailUrls from "../data/thumbnails.json";
-const images: Record<string, string> = thumbnailUrls;
+import { THUMBNAIL_COLOR } from "../engine/thumbnailSvg";
+import { libraryThumbnail, thumbnailMarkup } from "../engine/thumbnailCache";
 
 export const PartIcon = memo(function PartIcon({
-  part,
-  color = THUMBNAIL_COLOR,
-  rotation = 0,
-  large = false,
-}: {
-  part: Part;
-  color?: string;
-  rotation?: number;
-  large?: boolean;
-}) {
-  const angle = quarterTurn(rotation),
-    key = `${part.id}:${color}:${angle}`;
-  const base = images[`${part.id}:${angle}`] ?? images.unknown;
-  const [preview, setPreview] = useState<{ key: string; url: string } | null>(
-    null,
-  );
-  useEffect(() => {
-    const shape = shapeFor(part);
-    if (!shape || color.toLowerCase() === THUMBNAIL_COLOR) return;
-    let active = true;
-    coloredThumbnail(shape, color, angle)
-      .then((url) => {
-        if (active) setPreview({ key, url });
-      })
-      .catch(() => {
-        /* Keep the pre-rendered thumbnail if custom color rendering fails. */
-      });
-    return () => {
-      active = false;
-    };
-  }, [part, color, angle, key]);
-  return (
-    <img
-      className={`part-icon ${large ? "large" : ""}`}
-      src={preview?.key === key ? preview.url : base}
-      width="300"
-      height="210"
-      alt=""
-      aria-hidden="true"
-      loading={large ? "eager" : "lazy"}
-      decoding="async"
-      draggable={false}
-    />
-  );
+  part, color = THUMBNAIL_COLOR, rotation = 0, rotationX = 0, rotationZ = 0, large = false,
+}: { part: Part; color?: string; rotation?: number; rotationX?: number; rotationZ?: number; large?: boolean }) {
+  const id = useId();
+  const shape = useMemo(() => shapeFor(part), [part]);
+  const content = useMemo(() => {
+    if (!large) return "";
+    const svg = thumbnailMarkup(shape, color, rotation, rotationX, rotationZ);
+    return svg.slice(svg.indexOf(">") + 1, svg.lastIndexOf("</svg>"))
+      .replace(/id="([^"]+)"/g, (_, name) => `id="${id}-${name}"`).replace(/href="#([^"]+)"/g, (_, name) => `href="#${id}-${name}"`);
+  }, [shape, color, rotation, rotationX, rotationZ, large, id]);
+  // Only the single inspector preview is inline, so colors/rotation change in
+  // the same render. Catalog cards remain one predecoded image each.
+  if (large) return <svg className="part-icon large" width="300" height="210" viewBox="0 0 100 70" aria-hidden="true" dangerouslySetInnerHTML={{ __html: content }} />;
+  return <img className="part-icon" src={libraryThumbnail(shape)} width="300" height="210" alt="" aria-hidden="true" decoding="sync" draggable={false} />;
 });

@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "id": "3034",
+  "units": "ldu",
+  "origin": "body-bottom-center",
+  "up": "+y",
+  "source": {
+    "url": "https://library.ldraw.org/parts/4321",
+    "author": "James Jessiman",
+    "license": "CC-BY-4.0"
+  },
+  "geometry": {
+    "format": "ldraw-packed",
+    "asset": "models/3034.mpd",
+    "transform": {
+      "basis": [
+        [
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          -1,
+          0
+        ],
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "translation": [
+        0,
+        8,
+        0
+      ]
+    }
+  },
+  "collision": {
+    "template": "rectangular-shell",
+    "size": [
+      40,
+      8,
+      160
+    ],
+    "wall": 4,
+    "roof": 4,
+    "supports": "tubes",
+    "supportOuterRadius": 8,
+    "supportInnerRadius": 6
+  },
+  "connectors": [
+    {
+      "kind": "stud",
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "radius": 6,
+      "depth": 4,
+      "grid": {
+        "origin": [
+          -10,
+          8,
+          -70
+        ],
+        "steps": [
+          [
+            20,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            20
+          ]
+        ],
+        "count": [
+          2,
+          8
+        ]
+      }
+    },
+    {
+      "kind": "socket",
+      "normal": [
+        0,
+        -1,
+        0
+      ],
+      "radius": 6,
+      "depth": 4,
+      "grid": {
+        "origin": [
+          -10,
+          0,
+          -70
+        ],
+        "steps": [
+          [
+            20,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            20
+          ]
+        ],
+        "count": [
+          2,
+          8
+        ]
+      }
+    }
+  ]
+}
